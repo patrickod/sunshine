@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"embed"
 	"encoding/json"
@@ -9,17 +10,26 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 
 	"github.com/hhsnopek/etag"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"tailscale.com/tsnet"
+	"tailscale.com/tsweb"
 )
 
 var (
-	port = flag.Int("port", 8080, "http port to listen on")
+	port       = flag.Int("port", 8080, "http port to listen on")
+	runAsTSNet = flag.Bool("tsnet", false, "run as a Tailscale net server")
 	//go:embed static/*
 	staticFS embed.FS
 
@@ -55,6 +65,42 @@ var (
 		template.New("root").
 			Funcs(funcMap).
 			ParseFS(templateFS, "templates/base.html", "templates/email-template.html"))
+)
+
+// Define Prometheus metrics
+var (
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Count of all HTTP requests",
+		},
+		[]string{"method", "path"},
+	)
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "http_request_duration_seconds",
+			Help: "Duration of all HTTP requests",
+		},
+		[]string{"method", "path"},
+	)
+	httpInFlightRequests = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "http_in_flight_requests",
+		Help: "Current number of HTTP requests in flight",
+	})
+	httpRequestSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "http_request_size_bytes",
+			Help: "Size of HTTP requests",
+		},
+		[]string{"method", "path"},
+	)
+	httpResponseSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "http_response_size_bytes",
+			Help: "Size of HTTP responses",
+		},
+		[]string{"method", "path"},
+	)
 )
 
 type Department struct {
@@ -144,13 +190,21 @@ type foiaServer struct {
 
 func (s *foiaServer) CreateMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", s.indexHandler)
-	mux.HandleFunc("GET /list", s.listHandler)
-	mux.HandleFunc("GET /email-template", s.emailTemplateHandler)
-	mux.HandleFunc("GET /department/{id}", s.departmentHandler)
-	mux.HandleFunc("POST /search", s.searchHandler)
-	mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
+	mux.HandleFunc("/", s.indexHandler)
+	mux.HandleFunc("/list", s.listHandler)
+	mux.HandleFunc("/email-template", s.emailTemplateHandler)
+	mux.HandleFunc("/department/{id}", s.departmentHandler)
+	mux.HandleFunc("/search", s.searchHandler)
+	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	return mux
+}
+
+func init() {
+	prometheus.MustRegister(httpRequestsTotal)
+	prometheus.MustRegister(httpRequestDuration)
+	prometheus.MustRegister(httpInFlightRequests)
+	prometheus.MustRegister(httpRequestSize)
+	prometheus.MustRegister(httpResponseSize)
 }
 
 func main() {
@@ -164,13 +218,106 @@ func main() {
 	s := &foiaServer{
 		db: createDB(),
 	}
+	// Create a dynamic label middleware
+	dynamicLabelMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Dynamically set labels based on the request
+			path := r.URL.Path // Capture the request path
+			method := r.Method // Capture the request method
 
-	log.Printf("Starting server on port %d\n", *port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), LoggingMiddleware(s.CreateMux())); err != nil {
-		if err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %s\n", err)
+			// Wrap the original handler with dynamic labels
+			handler := promhttp.InstrumentHandlerInFlight(httpInFlightRequests,
+				promhttp.InstrumentHandlerDuration(httpRequestDuration.MustCurryWith(prometheus.Labels{"path": path, "method": method}),
+					promhttp.InstrumentHandlerCounter(httpRequestsTotal.MustCurryWith(prometheus.Labels{"path": path, "method": method}),
+						promhttp.InstrumentHandlerRequestSize(httpRequestSize.MustCurryWith(prometheus.Labels{"path": path, "method": method}),
+							promhttp.InstrumentHandlerResponseSize(httpResponseSize.MustCurryWith(prometheus.Labels{"path": path, "method": method}),
+								next)))))
+
+			// Serve using the dynamically labeled handler
+			handler.ServeHTTP(w, r)
+		})
+	}
+
+	// Wrap the mux with the dynamic label middleware
+	mux := s.CreateMux()
+	withPrometheus := dynamicLabelMiddleware(mux)
+	withLogging := LoggingMiddleware(withPrometheus)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	errChan := make(chan error, 1)
+
+	mainServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", *port),
+		Handler: withLogging,
+	}
+
+	metricsMux := http.NewServeMux()
+	tsweb.Debugger(metricsMux)
+	promServer := &http.Server{
+		Handler: metricsMux,
+	}
+
+	var metricsListener net.Listener
+	if *runAsTSNet {
+		var err error
+		s := tsnet.Server{
+			Hostname: "sunshine",
+			AuthKey:  os.Getenv("TS_AUTHKEY"),
+			Logf:     log.Printf,
+		}
+		metricsListener, err = s.Listen("tcp", ":80")
+		log.Println("Starting Prometheus server on port 80 tsnet")
+		if err != nil {
+			log.Fatalf("Failed to listen on port 80: %v", err)
+		}
+	} else {
+		var err error
+		log.Println("Starting Prometheus server on port 8081")
+		metricsListener, err = net.Listen("tcp", "localhost:8081")
+		if err != nil {
+			log.Fatalf("Failed to listen on port 8081: %v", err)
 		}
 	}
+	// Start main server
+	go func() {
+		log.Printf("Starting server on port %d\n", *port)
+		errChan <- mainServer.ListenAndServe()
+	}()
+
+	// Start Prometheus server
+	go func() {
+		errChan <- promServer.Serve(metricsListener)
+	}()
+
+	// Wait for shutdown signal
+	<-ctx.Done()
+	log.Println("Shutting down servers...")
+
+	// Create a timeout context for shutdown
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+
+	// Shutdown both servers
+	if err := mainServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Main server shutdown error: %v\n", err)
+	}
+	if err := promServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Prometheus server shutdown error: %v\n", err)
+	}
+
+	// Wait for server goroutines to exit
+	select {
+	case err := <-errChan:
+		if err != nil && err != http.ErrServerClosed {
+			log.Printf("Server error: %v\n", err)
+		}
+	case <-shutdownCtx.Done():
+		log.Println("Shutdown timeout")
+	}
+
+	log.Println("Servers successfully shut down")
 }
 
 func (s *foiaServer) indexHandler(w http.ResponseWriter, r *http.Request) {
