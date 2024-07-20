@@ -21,6 +21,7 @@ function parseSearch(results) {
         const a = document.createElement('a');
         a.href = `/department/${encodeURIComponent(dept.name_slug)}`;
         a.textContent = dept.name;
+        a.ariaLabel = `Contact ${dept.name}`;
         li.appendChild(a);
         ul.appendChild(li);
     });
