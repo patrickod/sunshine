@@ -1,0 +1,47 @@
+{{ template "base.html" .}}
+
+{{ define "content" }}
+
+<p>
+<h2>
+    {{ .Department.Name }} Public Records Request Information
+</h2>
+</p>
+
+<p>
+    Information about who to contact at each city office was compiled by hand
+    from dozens of websites and may be incomplete or outdated. In some cases, the
+    office in question didn’t list any public records contact at all. This is our
+    best guess of who to contact. If you can help correct something or fill in
+    missing information, please <a href='mailto:jds@riseup.net'>email John</a> or
+    create an issue <a href='https://github.com/cowlicks/sunshine'>on GitHub</a>.
+</p>
+
+<p>
+    Feel free to use <a href="/email-template"> this template </a> which includes
+    all the legalese.
+</p>
+
+
+<table>
+    <tr>
+        <td> Email: </td>
+        <td> <a href="mailto:{{ .Department.Email }}?subject=Public Records Request&body=
+{{ .EmailBody }}
+"> {{ .Department.Email }} </a></td>
+    </tr>
+    <tr>
+        <td> Name: </td>
+        <td> {{ .Department.Name }} </td>
+    </tr>
+    <tr>
+        <td> Notes: </td>
+        <td> {{ .Department.Notes }} </td>
+    </tr>
+    <tr>
+        <td> url: </td>
+        <td><a href="{{ .Department.URL }}">{{ .Department.URL }}</a></td>
+    </tr>
+</table>
+
+{{ end }}

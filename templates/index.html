@@ -1,10 +1,10 @@
-{% extends "base.html" %}
+{{ template "base.html" . }}
 
-{% block content %}
+{{ define "content" }}
 
 <a href="https://github.com/cowlicks/sunshine">
     <img style="position: absolute; top: 0; right: 0; border: 0;"
-         src="{{ url_for('static', filename='media/fork-me-on-github.png') }}"
+         src="{{ url_for "static" "media/fork-me-on-github.png" }}"
          alt="Fork me on GitHub (not tracking you)">
 </a>
 
@@ -26,13 +26,13 @@
 <section>
     <div id="search-results">
         <ul>
-        {% for name, dept in departments.items() %}
-        <li> <a href="{{ dept.localurl }}">{{ name }}</a></li>
-        {% endfor %}
+        {{ range $name, $department := .Departments }}
+        <li> <a href="{{ $department.LocalURL }}">{{ $department.Name }}</a></li>
+        {{ end }}
         </ul>
     </div>
 </section>
 
 <hr>
-<script src="{{ url_for('static', filename='js/search.js') }}"></script>
-{% endblock %}
+<script src="{{ url_for "static" "js/search.js" }}"></script>
+{{ end }}

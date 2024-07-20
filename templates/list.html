@@ -1,0 +1,10 @@
+{{ template "base.html" . }}
+
+{{ define "content" }}
+<h2>San Francisco FOIA department listing</h2>
+<ul>
+    {{ range $name, $department := .Departments }}
+    <li><a href="/department/{{ slugify $name }}">{{ $name }}</a></li>
+    {{ end }}
+</ul>
+{{ end }}

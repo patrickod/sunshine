@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>SunshineSF</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for "static" "css/styles.css" }}" />
+
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+</head>
+
+<body>
+    <div class="wrapper">
+        {{ block "content" . }}{{ end }}
+    </div>
+
+    <script src="{{ url_for "static" "js/scale.fix.js" }}"></script>
+</body>
+
+</html>
