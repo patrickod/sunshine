@@ -2,7 +2,7 @@
 
 {{ define "content" }}
 
-<a href="https://github.com/cowlicks/sunshine">
+<a href="https://github.com/patrickod/sunshine">
     <img style="position: absolute; top: 0; right: 0; border: 0;"
          src="{{ url_for "static" "media/fork-me-on-github.png" }}"
          alt="Fork me on GitHub (not tracking you)">
@@ -19,15 +19,16 @@
 </p>
 <hr>
 
-<input type="search" id="search-box" placeholder="Search departments...">
+<h2>Department List</h2>
+<input aria-label="Search San Francisco city government departments" type="search" id="search-box" placeholder="Search departments...">
 
 <hr>
 
 <section>
     <div id="search-results">
         <ul>
-        {{ range $name, $department := .Departments }}
-        <li> <a href="{{ $department.LocalURL }}">{{ $department.Name }}</a></li>
+        {{ range .Departments }}
+        <li> <a aria-label="contact {{ .Name }}" href="/department/{{ .NameSlug }}">{{ .Name }}</a></li>
         {{ end }}
         </ul>
     </div>

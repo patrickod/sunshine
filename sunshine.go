@@ -321,7 +321,31 @@ func main() {
 }
 
 func (s *foiaServer) indexHandler(w http.ResponseWriter, r *http.Request) {
-	safeRender(w, indexTemplate, departments)
+	departments := make([]Department, 0)
+	rows, err := s.db.Query(`
+		SELECT name,
+			name_slug,
+			email,
+			coalesce(contact_name, '') as contact_name,
+			coalesce(notes, '') as notes,
+			coalesce(url, '') as url
+		FROM departments
+		ORDER BY name ASC`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var d Department
+		err := rows.Scan(&d.Name, &d.NameSlug, &d.Email, &d.ContactName, &d.Notes, &d.URL)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		departments = append(departments, d)
+	}
+	safeRender(w, indexTemplate, struct{ Departments []Department }{departments})
 }
 
 func (s *foiaServer) emailTemplateHandler(w http.ResponseWriter, r *http.Request) {
