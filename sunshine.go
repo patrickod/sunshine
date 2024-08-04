@@ -30,6 +30,7 @@ import (
 var (
 	port       = flag.Int("port", 8080, "http port to listen on")
 	runAsTSNet = flag.Bool("tsnet", false, "run as a Tailscale net server")
+	tsnetDir   = flag.String("tsnet-dir", "", "directory to store Tailscale state")
 	//go:embed static/*
 	staticFS embed.FS
 
@@ -218,6 +219,9 @@ func main() {
 	s := &foiaServer{
 		db: createDB(),
 	}
+
+	// Wrap the mux with the dynamic label middleware
+	mux := s.CreateMux()
 	// Create a dynamic label middleware
 	dynamicLabelMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -237,9 +241,6 @@ func main() {
 			handler.ServeHTTP(w, r)
 		})
 	}
-
-	// Wrap the mux with the dynamic label middleware
-	mux := s.CreateMux()
 	withPrometheus := dynamicLabelMiddleware(mux)
 	withLogging := LoggingMiddleware(withPrometheus)
 
@@ -261,11 +262,15 @@ func main() {
 
 	var metricsListener net.Listener
 	if *runAsTSNet {
+		if *tsnetDir == "" {
+			log.Fatalf("must specify --tsnet-dir with --tsnet")
+		}
 		var err error
 		s := tsnet.Server{
 			Hostname: "sunshine",
 			AuthKey:  os.Getenv("TS_AUTHKEY"),
 			Logf:     log.Printf,
+			Dir:      *tsnetDir,
 		}
 		metricsListener, err = s.Listen("tcp", ":80")
 		log.Println("Starting Prometheus server on port 80 tsnet")

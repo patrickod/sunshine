@@ -25,3 +25,8 @@ processes = ['app']
 memory = '1gb'
 cpu_kind = 'shared'
 cpus = 1
+
+
+[mount]
+source = "sunshine_state"
+destination = "/sunshine"
