@@ -20,9 +20,9 @@ import (
 	"unicode"
 
 	"github.com/hhsnopek/etag"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	_ "modernc.org/sqlite"
 	"tailscale.com/tsnet"
 	"tailscale.com/tsweb"
 )
