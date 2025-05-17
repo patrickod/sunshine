@@ -23,9 +23,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	_ "modernc.org/sqlite"
 	"tailscale.com/tsnet"
 	"tailscale.com/tsweb"
+
+	_ "modernc.org/sqlite"
+	_ "tailscale.com/tsweb/promvarz"
 )
 
 var (
