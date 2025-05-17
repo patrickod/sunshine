@@ -23,9 +23,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	_ "modernc.org/sqlite"
 	"tailscale.com/tsnet"
 	"tailscale.com/tsweb"
+
+	_ "modernc.org/sqlite"
+	_ "tailscale.com/tsweb/promvarz"
 )
 
 var (
@@ -149,10 +151,32 @@ func loadDepartments() map[string]Department {
 }
 
 func createDB() *sql.DB {
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite", "sunshine.db")
 	if err != nil {
 		log.Fatalf("unable to open database: %v", err)
 	}
+
+	_, err = db.Exec("PRAGMA journal_mode=WAL")
+	if err != nil {
+		log.Fatalf("unable to set WAL mode: %v", err)
+	}
+
+	// Check if table exists before creating
+	var tableExists bool
+	err = db.QueryRow(`SELECT EXISTS (
+		SELECT 1 FROM sqlite_master
+		WHERE type='table' AND name='departments'
+	)`).Scan(&tableExists)
+	if err != nil {
+		log.Fatalf("unable to check if departments table exists: %v", err)
+	}
+
+	if tableExists {
+		log.Println("Using existing departments table")
+		return db
+	}
+
+	// initialize empty departments table
 	_, err = db.Exec(`CREATE VIRTUAL TABLE departments USING FTS5(
 		name,
 		name_slug,
@@ -181,7 +205,7 @@ func createDB() *sql.DB {
 			log.Fatalf("unable to insert department: %v", err)
 		}
 	}
-
+	log.Println("Initialized departments table with data")
 	return db
 
 }
