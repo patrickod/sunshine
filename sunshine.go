@@ -21,6 +21,7 @@ import (
 
 	"github.com/hhsnopek/etag"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	_ "modernc.org/sqlite"
 	"tailscale.com/tsnet"
@@ -70,32 +71,32 @@ var (
 
 // Define Prometheus metrics
 var (
-	httpRequestsTotal = prometheus.NewCounterVec(
+	httpRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
 			Help: "Count of all HTTP requests",
 		},
 		[]string{"method", "path"},
 	)
-	httpRequestDuration = prometheus.NewHistogramVec(
+	httpRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "http_request_duration_seconds",
 			Help: "Duration of all HTTP requests",
 		},
 		[]string{"method", "path"},
 	)
-	httpInFlightRequests = prometheus.NewGauge(prometheus.GaugeOpts{
+	httpInFlightRequests = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "http_in_flight_requests",
 		Help: "Current number of HTTP requests in flight",
 	})
-	httpRequestSize = prometheus.NewHistogramVec(
+	httpRequestSize = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "http_request_size_bytes",
 			Help: "Size of HTTP requests",
 		},
 		[]string{"method", "path"},
 	)
-	httpResponseSize = prometheus.NewHistogramVec(
+	httpResponseSize = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name: "http_response_size_bytes",
 			Help: "Size of HTTP responses",
@@ -198,14 +199,6 @@ func (s *foiaServer) CreateMux() *http.ServeMux {
 	mux.HandleFunc("/search", s.searchHandler)
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	return mux
-}
-
-func init() {
-	prometheus.MustRegister(httpRequestsTotal)
-	prometheus.MustRegister(httpRequestDuration)
-	prometheus.MustRegister(httpInFlightRequests)
-	prometheus.MustRegister(httpRequestSize)
-	prometheus.MustRegister(httpResponseSize)
 }
 
 func main() {
