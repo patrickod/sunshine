@@ -341,6 +341,7 @@ func (s *foiaServer) indexHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
+
 	for rows.Next() {
 		var d Department
 		err := rows.Scan(&d.Name, &d.NameSlug, &d.Email, &d.ContactName, &d.Notes, &d.URL)
@@ -349,6 +350,10 @@ func (s *foiaServer) indexHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		departments = append(departments, d)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	safeRender(w, indexTemplate, struct{ Departments []Department }{departments})
 }
@@ -404,6 +409,7 @@ func (s *foiaServer) searchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error querying department data", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
 
 	type searchResult struct {
 		Name     string `json:"name"`
@@ -420,7 +426,12 @@ func (s *foiaServer) searchHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		results = append(results, r)
 	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
 
