@@ -148,7 +148,7 @@ func loadDepartments() map[string]Department {
 }
 
 func createDB() *sql.DB {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		log.Fatalf("unable to open database: %v", err)
 	}
