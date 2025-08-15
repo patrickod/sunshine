@@ -143,7 +143,7 @@
 
                 # Allow writing to data directory
                 ReadWritePaths = [ cfg.dataDir ];
-              }
+              };
 
               environment = {
                 HOME = cfg.dataDir;
